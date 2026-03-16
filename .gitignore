@@ -1,0 +1,8 @@
+node_modules/
+user_data/
+.env
+service-account.json
+*.xlsx
+.DS_Store
+.bkit/
+.gemini/

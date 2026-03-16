@@ -1,0 +1,23 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-03-12T12:10:00.000Z",
+  "activeFeatures": ["coupang-automation"],
+  "primaryFeature": "coupang-automation",
+  "features": {
+    "coupang-automation": {
+      "currentPhase": "do",
+      "status": "active",
+      "updatedAt": "2026-03-12T12:10:00.000Z"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Starter",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-03-12T11:35:51.006Z",
+    "onboardingCompleted": true,
+    "lastActivity": "2026-03-12T12:10:00.000Z"
+  }
+}
