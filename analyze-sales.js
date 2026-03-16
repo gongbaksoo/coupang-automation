@@ -29,9 +29,9 @@ function generateSignature(method, path, query, secretKey) {
 
 async function fetchSalesData() {
   console.log('🔄 쿠팡 로켓그로스 매출 데이터 수집 중...');
-  // 최근 7일 데이터 조회 (YYYYMMDD 포맷)
+  // 최근 30일 데이터 조회 (YYYYMMDD 포맷 - 쿠팡 최대 조회 한도 안전선)
   const endDate = moment().format('YYYYMMDD');
-  const startDate = moment().subtract(7, 'days').format('YYYYMMDD');
+  const startDate = moment().subtract(30, 'days').format('YYYYMMDD');
   
   const path = `/v2/providers/rg_open_api/apis/api/v1/vendors/${CONFIG.vendorId}/rg/orders`;
   
@@ -66,8 +66,8 @@ async function fetchSalesData() {
         hasMore = false;
       }
 
-      // API 호출 제한 방지를 위해 약간의 딜레이
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // API 호출 제한 방지를 위해 약간의 딜레이 (쿠팡 제한: 보통 분당 50회)
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
     } catch (error) {
       console.log('⚠️ 쿠팡 매출 API 호출 실패:', error.response ? error.response.data.message : error.message);
@@ -121,7 +121,7 @@ async function writeSalesToSheet(salesData) {
 
   // 상세 데이터 헤더
   const values = [
-    ['최근 7일 상세 주문 내역', '업데이트 일시:', moment().format('YYYY-MM-DD HH:mm:ss'), '', '', '', ''],
+    ['최근 30일 상세 주문 내역', '업데이트 일시:', moment().format('YYYY-MM-DD HH:mm:ss'), '', '', '', ''],
     ['주문번호(Order ID)', '결제일시(Paid At)', '옵션ID(Vendor Item ID)', '상품명(Product Name)', '수량(Qty)', '단가(Unit Price)', '통화(Currency)'],
   ];
 

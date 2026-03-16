@@ -41,14 +41,18 @@ The system consists of three main components:
 4.  **Confirmation:** Bot pauses at the final "Submit" screen for user review.
 5.  **Logging:** Update Google Sheet `Order Status` to 'Done' after success.
 
-## 4. API Integration (Node.js/Python)
+## 4. API Integration (Node.js)
 - **Endpoint:** `https://api-gateway.coupang.com`
-- **Auth:** HMAC-SHA256 Signature.
+- **Auth:** HMAC-SHA256 Signature (Custom Signature generator).
+- **Rate Limiting:** Implemented 1.5s delay between requests to avoid 429 errors.
+- **Pagination:** Automatic loop using `nextToken` to fetch thousands of records.
 - **Key Methods:**
-    - `GET /v2/providers/rg_open_api/apis/api/v1/vendors/{vendorId}/rg/inventory/summaries`
-    - `GET /v2/providers/rg_open_api/apis/api/v1/vendors/{vendorId}/rg/orders`
+    - `GET /v2/providers/rg_open_api/apis/api/v1/vendors/{vendorId}/rg/orders` (Sales)
+    - `GET /v2/providers/openapi/apis/api/v6/vendors/{vendorId}/returnRequests` (Returns/Cancellations)
+    - `GET /v2/providers/rg_open_api/apis/api/v1/vendors/{vendorId}/rg/inventory/summaries` (Stock)
 
 ## 5. Security & Safety
-- **MFA Handling:** Use `persistentContext` to maintain login sessions.
-- **Dry Run:** Support a "Simulation Mode" where Playwright navigates but doesn't click final submit.
-- **Error Handling:** Screenshot capture on failure and notification via Spreadsheet.
+- **IP Whitelisting:** Registered current IP (1.215.255.114) in WING portal.
+- **MFA Handling:** Saved browser session in `user_data` directory.
+- **Excel Formatting:** Forced Number Type (Type 2) for order quantities to ensure Coupang validation passes.
+

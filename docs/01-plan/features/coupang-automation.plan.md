@@ -16,10 +16,14 @@ The user is asking about the state of the "Brainstorming" function in the Coupan
 - Feasibility study of various automation approaches.
 
 ## 4. Key Tasks
-- [ ] [Plan] 브레인스토밍기능 (Current Phase)
-- [ ] [Design] 브레인스토밍기능 설계
-- [ ] [Do] 브레인스토밍 수행 및 문서화
+- [x] [Plan] 브레인스토밍 및 기획
+- [x] [Design] 시스템 설계 및 데이터 스키마 정의
+- [x] [Do] 발주 자동화 로직 구현 (Excel 다운로드/업로드 방식)
+- [x] [Do] 매출 분석 및 반품/취소 데이터 수집 자동화 (Coupang API)
+- [ ] [Check] 전체 시스템 안정성 및 데이터 정확도 검증
 
 ## 5. Success Metrics
-- A clear list of at least 5 key automation features identified.
-- Completed brainstorming document approved by the user.
+- [x] 엑셀 업로드 방식을 통한 [다음] 버튼 활성화 성공.
+- [x] 최근 30일치 매출 및 반품 데이터(약 3,800건) 구글 시트 자동 수집 성공.
+- [x] 깃허브 저장소 백업 완료.
+
