@@ -1,29 +1,41 @@
-# PDCA Plan: 브레인스토밍 기능 (Brainstorming Function)
+# PDCA Plan: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: Draft | Date: 2026-03-12
+> Status: In Progress | Date: 2026-03-12 | Updated: 2026-03-17
 
 ## 1. Overview
-The user is asking about the state of the "Brainstorming" function in the Coupang Order Automation project. This plan initiates the brainstorming phase to define the project's scope and core features.
+쿠팡 로켓그로스(제트배송) 발주 프로세스 자동화 및 API를 활용한 실시간 매출/재고/반품 데이터 구글 시트 연동. n8n을 활용한 매일 자동 수집 자동화.
 
 ## 2. Goals
-- Define the core requirements for Coupang Order Automation.
-- Identify the brainstorming tools and methodologies to be used.
-- Establish the initial project roadmap.
+- 쿠팡 WING 발주 프로세스 자동화 (Playwright)
+- 쿠팡 API 기반 매출/반품/재고 데이터 자동 수집
+- n8n 워크플로우를 통한 매일 새벽 2시 자동 실행
+- 구글 시트에 데이터 Upsert (매출/반품) 및 스냅샷 (재고)
 
 ## 3. Scope
-- Analysis of current order processing tasks.
-- Brainstorming automation ideas.
-- Feasibility study of various automation approaches.
+- 발주 UI 자동화 (Playwright + 엑셀 업로드)
+- 매출/반품/재고 API 수집 스크립트 (Node.js)
+- n8n 자동화 워크플로우 (매일 새벽 2시 크론)
+- 구글 시트 연동 (서비스 계정 + OAuth2)
 
 ## 4. Key Tasks
 - [x] [Plan] 브레인스토밍 및 기획
 - [x] [Design] 시스템 설계 및 데이터 스키마 정의
 - [x] [Do] 발주 자동화 로직 구현 (Excel 다운로드/업로드 방식)
 - [x] [Do] 매출 분석 및 반품/취소 데이터 수집 자동화 (Coupang API)
+- [x] [Do] 창고 실시간 재고 수집 자동화 (Coupang API)
+- [x] [Do] n8n 워크플로우 구축 (매일 새벽 2시 자동 실행)
+  - [x] HMAC-SHA256 서명 생성 (순수 JS 구현)
+  - [x] HTTP Request 노드로 API 호출
+  - [x] 매출 분석 시트 Upsert (주문번호 기준)
+  - [x] 반품 및 취소 분석 시트 Upsert (접수번호 기준)
+  - [x] 창고 실시간 재고 시트 Clear + Append (매번 새로 쓰기)
 - [ ] [Check] 전체 시스템 안정성 및 데이터 정확도 검증
+- [ ] [Act] 페이지네이션 지원 (현재 첫 페이지만 수집)
 
 ## 5. Success Metrics
 - [x] 엑셀 업로드 방식을 통한 [다음] 버튼 활성화 성공.
 - [x] 최근 30일치 매출 및 반품 데이터(약 3,800건) 구글 시트 자동 수집 성공.
 - [x] 깃허브 저장소 백업 완료.
+- [x] n8n 워크플로우 정상 동작 확인 (매출 50건, 재고 20건 수집 성공).
+- [ ] n8n 페이지네이션으로 전체 데이터 수집 (현재 첫 페이지만).
 

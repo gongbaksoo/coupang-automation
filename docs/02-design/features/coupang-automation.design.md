@@ -1,6 +1,6 @@
 # PDCA Design: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: Draft | Date: 2026-03-12 | Feature: brainstorming (Order Automation)
+> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-17 | Feature: Order Automation + n8n Scheduling
 
 ## 1. System Architecture
 The system consists of three main components:
@@ -52,7 +52,43 @@ The system consists of three main components:
     - `GET /v2/providers/rg_open_api/apis/api/v1/vendors/{vendorId}/rg/inventory/summaries` (Stock)
 
 ## 5. Security & Safety
-- **IP Whitelisting:** Registered current IP (1.215.255.114) in WING portal.
+- **IP Whitelisting:** Registered IPs in WING portal: `1.215.255.114` (local), `110.12.64.124` (n8n server).
 - **MFA Handling:** Saved browser session in `user_data` directory.
 - **Excel Formatting:** Forced Number Type (Type 2) for order quantities to ensure Coupang validation passes.
+
+## 6. n8n Workflow Architecture (Added 2026-03-17)
+
+### 6.1 Overview
+- **Workflow ID:** `n3KuSwGA5SfO7oV0`
+- **Schedule:** 매일 새벽 2시 (KST)
+- **n8n Instance:** `https://n8n.gongbaksoo.com` (Mac Mini, IP: `110.12.64.124`)
+- **Total Nodes:** 15
+
+### 6.2 Node Flow
+```
+새벽2시 → 설정값(API키)
+  → 매출 서명(Code) → 매출 API(HTTP Request) → 매출 추출(Code) → 매출 분석 업데이트(Sheets)
+  → 반품 서명(Code) → 반품 API(HTTP Request) → 반품 추출(Code) → 반품 분석 업데이트(Sheets)
+  → 재고 시트 초기화(Sheets Clear) → 재고 서명(Code) → 재고 API(HTTP Request) → 재고 추출(Code) → 재고 저장(Sheets Append)
+```
+
+### 6.3 Key Design Decisions
+| 결정 | 이유 |
+|------|------|
+| Code Node → 순수 JS HMAC-SHA256 | n8n 샌드박스에서 `require('crypto')`, `fetch()`, `crypto.subtle` 모두 차단 |
+| HTTP Request Node → API 호출 | Code Node에서 HTTP 호출 불가, n8n 네이티브 노드 사용 |
+| 매출/반품: appendOrUpdate | 주문번호/접수번호 기준 중복 방지 Upsert |
+| 재고: Clear + Append | 매번 최신 스냅샷으로 교체 (누적 불필요) |
+| 서명 노드 분리 | 서명 생성(Code) → API 호출(HTTP Request) → 데이터 추출(Code) 3단계 분리 |
+
+### 6.4 Google Sheets Mapping
+| 시트명 | GID | 동작 | 매칭 키 |
+|--------|-----|------|---------|
+| 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) |
+| 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 |
+| 창고 실시간 재고 | 89346414 | Clear → Append | - |
+
+### 6.5 Limitations
+- **페이지네이션 미지원:** 현재 API 첫 페이지만 수집 (매출 ~50건). 전체 수집하려면 루프 구현 필요.
+- **반품 RU 상태만:** CC(취소완료) 상태는 별도 API 호출 필요.
 
