@@ -87,8 +87,8 @@ The system consists of three main components:
 | 시트명 | GID | 동작 | 매칭 키 | 열 |
 |--------|-----|------|---------|-----|
 | 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~J (판매금액, 결제일, 최근 수정일시 포함) |
-| 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~H |
-| 창고 실시간 재고 | 89346414 | Clear → Append | - | A~D (한글 헤더) |
+| 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~I (최근 수정일시 포함) |
+| 창고 실시간 재고 | 89346414 | Clear → Append | - | A~E (한글 헤더, 최근 수정일시 포함) |
 
 ### 6.5 Architecture Evolution
 | 버전 | 날짜 | 구조 | 문제 |
