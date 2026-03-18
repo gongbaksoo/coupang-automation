@@ -76,6 +76,66 @@ n8n Code Node에서 사용 **가능**한 것:
 
 ### 올바른 n8n 아키텍처 패턴
 ```
-[잘못된 방식] Code Node에서 모든 것을 처리 (HTTP + 서명 + 파싱)
-[올바른 방식] Code Node(서명) → HTTP Request Node(API 호출) → Code Node(파싱)
+[1차 시도 - 실패] Code Node에서 모든 것을 처리 (HTTP + 서명 + 파싱)
+[2차 시도 - 부분 성공] Code Node(서명) → HTTP Request Node(API 호출) → Code Node(파싱)
+  → 문제: 페이지네이션 불가, UTC 날짜 어긋남
+[최종 해결] Execute Command Node(Node.js 직접 실행) → Code Node(파싱) → Google Sheets
+  → require('crypto'), require('https') 사용 가능, 페이지네이션 완전 지원
+```
+
+---
+
+## 추가 에러 기록 (2026-03-18)
+
+## 에러 11: Execute Command 전환 후에도 `fetch is not defined` 지속
+- **상황:** Execute Command 기반으로 전환했지만 여전히 fetch 에러
+- **원인:** n8n UI 브라우저 캐시 - 사용자가 새로고침하지 않으면 이전 Code Node 버전이 실행됨
+- **해결:** n8n 페이지 새로고침(F5) 후 재실행. n8n은 MCP API 업데이트와 UI 캐시가 별도로 동작.
+
+## 에러 12: 날짜 범위 UTC 기준 (3/18 데이터 누락)
+- **상황:** 새벽 2시(KST) 실행 시 3/18 데이터가 수집되지 않음
+- **원인:** Code Node의 `new Date()`가 UTC 반환. KST 새벽 2시 = UTC 17:00(3/17). `endDate=20260317`이 되어 3/18 미포함.
+- **해결:** Execute Command 스크립트에서 `new Date(Date.now() + 9 * 3600000)` → KST 기준 날짜 계산
+
+## 에러 13: 페이지네이션 미동작 (매출 50건만 수집)
+- **상황:** 2일치 매출 ~260건 중 50건(첫 페이지)만 수집
+- **원인:** Code Node → HTTP Request Node 구조에서는 루프 불가. HMAC 서명이 매 요청마다 달라져야 하므로 HTTP Request Node의 내장 페이지네이션도 사용 불가.
+- **근본 해결:** Execute Command Node로 전환. 스크립트 내 `while(hasMore)` 루프로 nextToken 자동 처리. 295건 수집 성공.
+
+## 에러 14: 재고 시트 Clear 시 헤더 삭제
+- **상황:** Google Sheets `clear` 작업 후 1행 헤더가 사라짐
+- **원인:** `clear: "allSheetContent"` 옵션이 헤더 포함 전체 삭제
+- **해결 1차:** `clear: "specificRows"` + `startIndex: 2` → `Bad request` 에러
+- **해결 2차:** `clear: "belowHeader"` → `Unable to parse range` 에러
+- **최종 해결:** 기본 `clear` 옵션(파라미터 없이)이 동작. 헤더도 삭제되지만, 재고 수집 스크립트가 한글 key로 데이터 출력 → Google Sheets append가 한글 헤더 자동 생성.
+
+## 에러 15: 재고 저장 `Could not retrieve the column data`
+- **상황:** 재고 시트 Clear 후 append 시 컬럼 데이터 조회 실패
+- **원인:** Clear가 헤더까지 삭제한 후, 재고 수집(Execute Command)이 영문 key(`skuId` 등)로 출력. append가 영문 헤더를 생성했지만 Sheets 노드의 스키마는 한글 헤더 기대.
+- **해결:** 재고 수집 스크립트의 JSON key를 한글로 변경 (`옵션ID(SKU)` 등) + Sheets 노드 매핑도 한글로 통일.
+
+## 에러 16: 매출 H/I열(판매금액, 결제일) 미입력
+- **상황:** n8n이 A~G열만 쓰고 H(판매금액), I(결제일)열은 비어있음
+- **원인:** 초기 설계 시 H/I열을 매핑하지 않음. 기존 수동 스크립트에서도 H/I열은 구글 시트 수식이었음.
+- **해결:** 매출 파싱 Code Node에서 `salesAmount = qty * unitPrice`, `paidDate = YYYY. M. D` 포맷 계산 추가. Sheets 노드에 판매금액/결제일 컬럼 매핑 추가.
+
+---
+
+## 최종 아키텍처 교훈
+
+### n8n에서 외부 API 호출 시 최적 패턴
+```
+[최적] Execute Command Node (node << 'ENDSCRIPT' ... ENDSCRIPT)
+  - require('crypto'), require('https') 자유 사용
+  - 페이지네이션 루프 가능
+  - 타임존 직접 제어
+  - 단점: 인라인 스크립트가 길어짐
+
+[차선] Code Node(서명) → HTTP Request Node(호출) → Code Node(파싱)
+  - 단순 API 호출에는 적합
+  - 페이지네이션 불가
+  - HMAC 등 동적 서명 재생성 필요 시 루프 불가
+
+[불가] Code Node에서 직접 HTTP 호출
+  - require(), fetch(), crypto 모두 차단
 ```

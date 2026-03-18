@@ -1,6 +1,6 @@
 # PDCA Design: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-17 | Feature: Order Automation + n8n Scheduling
+> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-18 | Feature: Order Automation + n8n Scheduling
 
 ## 1. System Architecture
 The system consists of three main components:
@@ -62,33 +62,38 @@ The system consists of three main components:
 - **Workflow ID:** `n3KuSwGA5SfO7oV0`
 - **Schedule:** 매일 새벽 2시 (KST)
 - **n8n Instance:** `https://n8n.gongbaksoo.com` (Mac Mini, IP: `110.12.64.124`)
-- **Total Nodes:** 15
+- **Total Nodes:** 11
 
-### 6.2 Node Flow
+### 6.2 Node Flow (v2 - Execute Command 기반, 2026-03-18)
 ```
-새벽2시 → 설정값(API키)
-  → 매출 서명(Code) → 매출 API(HTTP Request) → 매출 추출(Code) → 매출 분석 업데이트(Sheets)
-  → 반품 서명(Code) → 반품 API(HTTP Request) → 반품 추출(Code) → 반품 분석 업데이트(Sheets)
-  → 재고 시트 초기화(Sheets Clear) → 재고 서명(Code) → 재고 API(HTTP Request) → 재고 추출(Code) → 재고 저장(Sheets Append)
+새벽2시 → 매출 수집(Execute Command) → 매출 파싱(Code) → 매출 분석 업데이트(Sheets)
+         → 반품 수집(Execute Command) → 반품 파싱(Code) → 반품 분석 업데이트(Sheets)
+         → 재고 시트 초기화(Sheets Clear) → 재고 수집(Execute Command) → 재고 파싱(Code) → 재고 저장(Sheets Append)
 ```
 
 ### 6.3 Key Design Decisions
 | 결정 | 이유 |
 |------|------|
-| Code Node → 순수 JS HMAC-SHA256 | n8n 샌드박스에서 `require('crypto')`, `fetch()`, `crypto.subtle` 모두 차단 |
-| HTTP Request Node → API 호출 | Code Node에서 HTTP 호출 불가, n8n 네이티브 노드 사용 |
+| **Execute Command Node** | Code Node 샌드박스에서 `require()`, `fetch()`, `crypto` 모두 차단 → 셸에서 Node.js 직접 실행으로 우회 |
+| heredoc 스크립트 | `node << 'ENDSCRIPT'` 방식으로 인라인 Node.js 실행, 따옴표 이스케이프 문제 해결 |
+| KST 날짜 계산 | `Date.now() + 9*3600000`으로 UTC → KST 보정 |
+| 페이지네이션 완전 지원 | Execute Command 내 while 루프로 nextToken 자동 처리 |
+| 매출 판매금액/결제일 | 매출 파싱 Code Node에서 `qty * unitPrice` 계산 + 날짜 포맷 변환 |
 | 매출/반품: appendOrUpdate | 주문번호/접수번호 기준 중복 방지 Upsert |
-| 재고: Clear + Append | 매번 최신 스냅샷으로 교체 (누적 불필요) |
-| 서명 노드 분리 | 서명 생성(Code) → API 호출(HTTP Request) → 데이터 추출(Code) 3단계 분리 |
+| 반품: RU + CC | 두 상태 모두 순차 수집 |
+| 재고: Clear + Append | 매번 최신 스냅샷으로 교체 (한글 헤더 자동 생성) |
 
 ### 6.4 Google Sheets Mapping
-| 시트명 | GID | 동작 | 매칭 키 |
-|--------|-----|------|---------|
-| 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) |
-| 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 |
-| 창고 실시간 재고 | 89346414 | Clear → Append | - |
+| 시트명 | GID | 동작 | 매칭 키 | 열 |
+|--------|-----|------|---------|-----|
+| 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~I (판매금액, 결제일 포함) |
+| 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~H |
+| 창고 실시간 재고 | 89346414 | Clear → Append | - | A~D (한글 헤더) |
 
-### 6.5 Limitations
-- **페이지네이션 미지원:** 현재 API 첫 페이지만 수집 (매출 ~50건). 전체 수집하려면 루프 구현 필요.
-- **반품 RU 상태만:** CC(취소완료) 상태는 별도 API 호출 필요.
+### 6.5 Architecture Evolution
+| 버전 | 날짜 | 구조 | 문제 |
+|------|------|------|------|
+| v1 | 3/17 | Code Node (순수 JS HMAC + fetch) | `require()`, `fetch()`, `crypto` 모두 차단 |
+| v1.5 | 3/17 | Code Node (순수 JS HMAC) + HTTP Request Node | 페이지네이션 불가, UTC 날짜 |
+| **v2** | **3/18** | **Execute Command Node** | **모든 문제 해결** |
 
