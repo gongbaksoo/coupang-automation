@@ -78,7 +78,7 @@ The system consists of three main components:
 | heredoc 스크립트 | `node << 'ENDSCRIPT'` 방식으로 인라인 Node.js 실행, 따옴표 이스케이프 문제 해결 |
 | KST 날짜 계산 | `Date.now() + 9*3600000`으로 UTC → KST 보정 |
 | 페이지네이션 완전 지원 | Execute Command 내 while 루프로 nextToken 자동 처리 |
-| 매출 판매금액/결제일 | 매출 파싱 Code Node에서 `qty * unitPrice` 계산 + 날짜 포맷 변환 |
+| 매출 판매금액/결제일/수정일시 | 매출 파싱 Code Node에서 `qty * unitPrice` 계산 + 날짜 포맷 변환 + KST 수정 시간 |
 | 매출/반품: appendOrUpdate | 주문번호/접수번호 기준 중복 방지 Upsert |
 | 반품: RU + CC | 두 상태 모두 순차 수집 |
 | 재고: Clear + Append | 매번 최신 스냅샷으로 교체 (한글 헤더 자동 생성) |
@@ -86,7 +86,7 @@ The system consists of three main components:
 ### 6.4 Google Sheets Mapping
 | 시트명 | GID | 동작 | 매칭 키 | 열 |
 |--------|-----|------|---------|-----|
-| 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~I (판매금액, 결제일 포함) |
+| 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~J (판매금액, 결제일, 최근 수정일시 포함) |
 | 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~H |
 | 창고 실시간 재고 | 89346414 | Clear → Append | - | A~D (한글 헤더) |
 
