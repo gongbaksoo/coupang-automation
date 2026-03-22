@@ -1,6 +1,6 @@
 # PDCA Design: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-18 | Feature: Order Automation + n8n Scheduling
+> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-22 | Feature: Order Automation + n8n Scheduling
 
 ## 1. System Architecture
 The system consists of three main components:
@@ -64,11 +64,13 @@ The system consists of three main components:
 - **n8n Instance:** `https://n8n.gongbaksoo.com` (Mac Mini, IP: `110.12.64.124`)
 - **Total Nodes:** 8
 
-### 6.2 Node Flow (v3 - Execute Command + 서비스 계정 JWT, 2026-03-18)
+### 6.2 Node Flow (v4 - 병렬 실행 + 2단계 상품명 매핑, 2026-03-22)
 ```
-새벽2시 → 매출 수집(Execute Command) → 매출 파싱(Code) → 매출 분석 업데이트(Sheets OAuth2)
-         → 반품 수집(Execute Command) → 반품 파싱(Code) → 반품 분석 업데이트(Sheets OAuth2)
-         → 재고 전체 처리(Execute Command: 쿠팡 API + 상품명 매핑 + Sheets 서비스 계정 JWT로 Clear+Write)
+            ┌→ 매출 수집(Execute Command) → 매출 파싱(Code) → 매출 분석 업데이트(Sheets OAuth2)
+            │
+새벽2시 ───┼→ 반품 수집(Execute Command) → 반품 파싱(Code) → 반품 분석 업데이트(Sheets OAuth2)
+            │
+            └→ 재고 전체 처리(Execute Command: 쿠팡 API + 2단계 상품명 매핑 + Sheets 서비스 계정 JWT)
 ```
 
 ### 6.3 Key Design Decisions
@@ -82,7 +84,8 @@ The system consists of three main components:
 | 매출/반품: appendOrUpdate | 주문번호/접수번호 기준 중복 방지 Upsert |
 | 반품: RU + CC | 두 상태 모두 순차 수집 |
 | 재고: 서비스 계정 JWT 직접 호출 | OAuth2 할당량과 분리. Execute Command에서 JWT 인증 → Sheets API Clear + Append 직접 수행 |
-| 재고 상품명 매핑 | 매출 분석 시트에서 옵션ID→상품명 조회 후 재고 데이터에 합침 |
+| 재고 상품명 2단계 매핑 | 1순위: 상품정보 시트(B열 옵션ID → E+F열 상품명), 2순위: 매출 분석 시트(C열→D열) 보충 |
+| **병렬 실행 구조 (v4)** | **순차 실행 시 반품 0건이면 n8n이 다음 노드를 스킵 → 재고 미실행 버그. 트리거에서 3갈래 병렬로 해결** |
 
 ### 6.4 Google Sheets Mapping
 | 시트명 | GID | 동작 | 매칭 키 | 열 |
@@ -97,5 +100,6 @@ The system consists of three main components:
 | v1 | 3/17 | Code Node (순수 JS HMAC + fetch) | `require()`, `fetch()`, `crypto` 모두 차단 |
 | v1.5 | 3/17 | Code Node (순수 JS HMAC) + HTTP Request Node | 페이지네이션 불가, UTC 날짜 |
 | v2 | 3/18 | Execute Command Node | OAuth2 할당량 초과 (매출 295건 Upsert가 분당 60회 한도 소진) |
-| **v3** | **3/18** | **Execute Command + 서비스 계정 JWT** | **재고를 서비스 계정으로 분리, 8노드로 최적화** |
+| v3 | 3/18 | Execute Command + 서비스 계정 JWT | 재고를 서비스 계정으로 분리, 8노드로 최적화 |
+| **v4** | **3/22** | **병렬 실행 + 2단계 상품명 매핑** | **반품 0건 시 체인 끊김 해결, 상품정보 시트 우선 매핑** |
 
