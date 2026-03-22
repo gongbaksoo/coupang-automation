@@ -62,15 +62,15 @@ The system consists of three main components:
 - **Workflow ID:** `n3KuSwGA5SfO7oV0`
 - **Schedule:** 매일 새벽 2시 (KST)
 - **n8n Instance:** `https://n8n.gongbaksoo.com` (Mac Mini, IP: `110.12.64.124`)
-- **Total Nodes:** 8
+- **Total Nodes:** 10
 
-### 6.2 Node Flow (v4 - 병렬 실행 + 2단계 상품명 매핑, 2026-03-22)
+### 6.2 Node Flow (v5 - 병렬 수집 + Merge 대기 + 상품정보 업데이트, 2026-03-22)
 ```
-            ┌→ 매출 수집(Execute Command) → 매출 파싱(Code) → 매출 분석 업데이트(Sheets OAuth2)
-            │
-새벽2시 ───┼→ 반품 수집(Execute Command) → 반품 파싱(Code) → 반품 분석 업데이트(Sheets OAuth2)
-            │
-            └→ 재고 전체 처리(Execute Command: 쿠팡 API + 2단계 상품명 매핑 + Sheets 서비스 계정 JWT)
+            ┌→ 매출 수집 → 매출 파싱 → 매출 분석 업데이트 ──┐
+            │                                                  │
+새벽2시 ───┼→ 반품 수집 → 반품 파싱 → 반품 분석 업데이트     ├→ 대기(Merge) → 상품정보 업데이트
+            │                                                  │
+            └→ 재고 전체 처리(2단계 상품명 매핑) ─────────────┘
 ```
 
 ### 6.3 Key Design Decisions
@@ -86,6 +86,8 @@ The system consists of three main components:
 | 재고: 서비스 계정 JWT 직접 호출 | OAuth2 할당량과 분리. Execute Command에서 JWT 인증 → Sheets API Clear + Append 직접 수행 |
 | 재고 상품명 2단계 매핑 | 1순위: 상품정보 시트(B열 옵션ID → E+F열 상품명), 2순위: 매출 분석 시트(C열→D열) 보충 |
 | **병렬 실행 구조 (v4)** | **순차 실행 시 반품 0건이면 n8n이 다음 노드를 스킵 → 재고 미실행 버그. 트리거에서 3갈래 병렬로 해결** |
+| **Merge 대기 노드 (v5)** | **매출/재고 두 브랜치 완료를 대기한 후 상품정보 업데이트 실행. 최신 데이터로 계산 보장** |
+| 상품정보 자동 업데이트 | 매출 분석 시트에서 30일/7일 판매량 집계, 재고 시트에서 현 재고량 조회, 품절 예상일 = 현 재고 ÷ 7일 일평균 |
 
 ### 6.4 Google Sheets Mapping
 | 시트명 | GID | 동작 | 매칭 키 | 열 |
@@ -93,6 +95,7 @@ The system consists of three main components:
 | 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~J (판매금액, 결제일, 최근 수정일시 포함) |
 | 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~I (최근 수정일시 포함) |
 | 창고 실시간 재고 | 89346414 | Clear → Append (서비스 계정 JWT) | - | A~F (상품명, 최근 수정일시 포함) |
+| 상품정보 | - | PUT 덮어쓰기 (서비스 계정 JWT) | 옵션 ID (B열 기준) | H~K (30일 일평균, 7일 일평균, 현 재고량, 품절 예상일) |
 
 ### 6.5 Architecture Evolution
 | 버전 | 날짜 | 구조 | 문제 |
@@ -101,5 +104,6 @@ The system consists of three main components:
 | v1.5 | 3/17 | Code Node (순수 JS HMAC) + HTTP Request Node | 페이지네이션 불가, UTC 날짜 |
 | v2 | 3/18 | Execute Command Node | OAuth2 할당량 초과 (매출 295건 Upsert가 분당 60회 한도 소진) |
 | v3 | 3/18 | Execute Command + 서비스 계정 JWT | 재고를 서비스 계정으로 분리, 8노드로 최적화 |
-| **v4** | **3/22** | **병렬 실행 + 2단계 상품명 매핑** | **반품 0건 시 체인 끊김 해결, 상품정보 시트 우선 매핑** |
+| v4 | 3/22 | 병렬 실행 + 2단계 상품명 매핑 | 반품 0건 시 체인 끊김 해결, 상품정보 시트 우선 매핑 |
+| **v5** | **3/22** | **병렬 + Merge 대기 + 상품정보 업데이트** | **매출/재고 완료 후 일평균 판매량·품절 예상일 자동 계산, 10노드** |
 
