@@ -139,3 +139,13 @@ n8n Code Node에서 사용 **가능**한 것:
 [불가] Code Node에서 직접 HTTP 호출
   - require(), fetch(), crypto 모두 차단
 ```
+
+---
+
+## 추가 에러 기록 (2026-03-23)
+
+## 에러 17: n8n MCP updateNode 시 Google Sheets 노드 operation 초기화
+- **상황:** n8n MCP API의 `updateNode`로 매출 분석 업데이트 노드의 `columns` 스키마만 업데이트했더니, 노드가 `read: sheet`로 표시되며 에러 발생
+- **원인:** `updateNode`에서 `parameters.columns`만 전달하면 `operation`, `documentId`, `sheetName` 등 기존 파라미터가 덮어씌워져 기본값(`read`)으로 초기화됨
+- **해결:** `updateNode` 시 `columns`뿐 아니라 `operation: "appendOrUpdate"`, `documentId`, `sheetName` 등 모든 필수 파라미터를 함께 전달
+- **교훈:** n8n MCP `updateNode`의 `parameters`는 **부분 업데이트가 아닌 전체 교체(replace)**로 동작함. 변경하지 않는 파라미터도 반드시 포함해야 함
