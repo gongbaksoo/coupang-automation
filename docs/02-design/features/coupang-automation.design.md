@@ -28,6 +28,7 @@ The system consists of three main components:
 | **M** | **최근 7일 기준 재고** | **n8n 자동** | **I열 × 30 (7일 트렌드 기반 30일치)** |
 | **N** | **최종 발주 참고 수량** | **n8n 자동** | **max(L열, M열)** |
 | **O** | **최종 발주량** | **n8n 자동** | **ceil((N열 - J열) / G열) × G열, 0 이하면 0** |
+| **P** | **최종 발주량 (BOX)** | **n8n 자동** | **O열 ÷ G열 (박스 수)** |
 
 ## 3. Order Automation Flow (Playwright + Excel)
 
@@ -37,7 +38,7 @@ The system consists of three main components:
     상품정보 시트 L~O열:
     → L열: 30일 일평균(H) × 30, M열: 7일 일평균(I) × 30
     → N열: max(L, M), O열: ceil((N - 현재고(J)) / 입수량(G)) × G
-    → O열 > 0인 상품이 발주 대상
+    → O열 > 0인 상품이 발주 대상, P열: 박스 수
             ↓
 [2] Playwright: 쿠팡 WING 접속 (세션 저장으로 자동 로그인, MFA 시 수동 대기)
             ↓
@@ -175,7 +176,7 @@ The system consists of three main components:
 | 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~K (SKU ID, 판매금액, 결제일, 최근 수정일시 포함) |
 | 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~I (최근 수정일시 포함) |
 | 창고 실시간 재고 | 89346414 | Clear → Append (서비스 계정 JWT) | - | A~F (상품명, 최근 수정일시 포함) |
-| 상품정보 | - | PUT 덮어쓰기 (서비스 계정 JWT) | SKU ID (C열 기준) | H~O (30일 일평균, 7일 일평균, 현 재고량, 품절 예상일, 30일 기준 재고, 7일 기준 재고, 최종 발주 참고 수량, 최종 발주량) |
+| 상품정보 | - | PUT 덮어쓰기 (서비스 계정 JWT) | SKU ID (C열 기준) | H~P (30일 일평균, 7일 일평균, 현 재고량, 품절 예상일, 30일/7일 기준 재고, 최종 발주 참고 수량, 최종 발주량, 최종 발주량 BOX) |
 
 ### 6.5 Architecture Evolution
 | 버전 | 날짜 | 구조 | 문제 |
