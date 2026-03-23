@@ -1,6 +1,6 @@
 # PDCA Design: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-23 | Feature: Order Automation + n8n Scheduling
+> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-24 | Feature: Order Automation + n8n Scheduling
 
 ## 1. System Architecture
 The system consists of three main components:
@@ -10,36 +10,114 @@ The system consists of three main components:
 
 ## 2. Data Schema (Google Spreadsheet)
 
-### Sheet 1: [Product Info] (User Input)
-| Column | Description | Example |
-| :--- | :--- | :--- |
-| SKU ID | Coupang SKU Identifier | 12345678 |
-| Product Name | Name of the product | A-Product |
-| Box Quantity (EA) | Units per box | 20 |
-| Min Stock Level | Safety stock threshold | 100 |
-| Max Stock Level | Target stock level | 500 |
+### Sheet: 상품정보 (Product Info)
+| 열 | 컬럼명 | 소스 | 설명 |
+| :--- | :--- | :--- | :--- |
+| A | 등록상품ID | 사용자 | 쿠팡 등록상품 ID |
+| B | 옵션ID | 사용자 | 쿠팡 옵션 ID |
+| C | SKU ID | 사용자 | 쿠팡 SKU 식별자 (매핑 키) |
+| D | 바코드 | 사용자 | 상품 바코드 |
+| E | 등록상품명 | 사용자 | 상품명 |
+| F | 옵션명 | 사용자 | 옵션명 |
+| G | 입수량 | 사용자 | 박스당 수량 (EA) |
+| H | 30일 일평균 | n8n 자동 | 최근 30일 일평균 판매량 |
+| I | 7일 일평균 | n8n 자동 | 최근 7일 일평균 판매량 |
+| J | 현 재고량 | n8n 자동 | 쿠팡 FC 현재 재고 |
+| K | 품절 예상일 | n8n 자동 | 현 재고 ÷ 7일 일평균 |
+| **L** | **최근 30일 기준 재고** | **n8n 자동** | **H열 × 30 (30일치 재고량)** |
+| **M** | **최근 7일 기준 재고** | **n8n 자동** | **I열 × 30 (7일 트렌드 기반 30일치)** |
+| **N** | **최종 발주 참고 수량** | **n8n 자동** | **max(L열, M열)** |
+| **O** | **최종 발주량** | **n8n 자동** | **ceil((N열 - J열) / G열) × G열, 0 이하면 0** |
 
-### Sheet 2: [Analysis & Order] (Automated)
-| Column | Description | Source |
-| :--- | :--- | :--- |
-| SKU ID | Product Identifier | API |
-| Current Stock | Stock in Coupang FC | API |
-| 7-Day Sales | Sales for the last 7 days | API |
-| Predicted Out-of-Stock | Estimated days left | Calculation |
-| Required Quantity (EA) | (Max - Current) | Calculation |
-| **Order Boxes** | **Required / Box Qty (Rounded)** | **Calculation** |
-| **Order Status** | **[Pending / Approved / Done]** | **User/Bot** |
+## 3. Order Automation Flow (Playwright + Excel)
 
-## 3. Automation Flow (Playwright)
+### 3.1 전체 흐름
+```
+[1] 구글 시트에서 발주 대상 계산 (n8n 자동 계산)
+    상품정보 시트 L~O열:
+    → L열: 30일 일평균(H) × 30, M열: 7일 일평균(I) × 30
+    → N열: max(L, M), O열: ceil((N - 현재고(J)) / 입수량(G)) × G
+    → O열 > 0인 상품이 발주 대상
+            ↓
+[2] Playwright: 쿠팡 WING 접속 (세션 저장으로 자동 로그인, MFA 시 수동 대기)
+            ↓
+[3] 입고관리 > 새로운 입고 생성 > 엑셀로 업로드하기 > 엑셀 다운로드
+    → coupang_template.xlsx 저장
+            ↓
+[4] 엑셀 가공 (Node.js + ExcelJS)
+    - coupang_template.xlsx 읽기
+    - SKU ID(36열) 매칭 → 입고 수량(22열)에 발주수량 입력
+    - 유통기한 필요 상품: 유통기한/제조일자 입력
+    - coupang_upload_ready.xlsx 저장
+            ↓
+[5] Playwright: 가공된 엑셀 업로드 (input[type="file"])
+            ↓
+[6] 사용자 리뷰 대기 (봇 일시정지, 최종 확인 후 수동 제출)
+            ↓
+[7] 구글 시트 상태 업데이트 (Order Status → Done)
+```
 
-1.  **Login:** Access WING portal -> User handles MFA (Session saved).
-2.  **Navigation:** Move to `로켓그로스 > 입고관리 > 입고 생성`.
-3.  **Data Entry:**
-    *   Read Google Sheet where `Order Status == 'Approved'`.
-    *   Search SKU -> Input `Order Boxes` quantity.
-    *   Select FC (Fulfillment Center) based on Coupang's recommendation.
-4.  **Confirmation:** Bot pauses at the final "Submit" screen for user review.
-5.  **Logging:** Update Google Sheet `Order Status` to 'Done' after success.
+### 3.2 기존 스크립트
+| 파일 | 역할 | 상태 |
+|------|------|------|
+| `order-automation.js` | Playwright 메인 (로그인→다운로드→가공→업로드) | 기본 동작 확인됨 |
+| `process-excel.js` | ExcelJS로 발주수량 입력 (SKU ID 매칭) | 기본 동작 확인됨 |
+| `index.js` | API 호출 + Playwright 통합 진입점 | 스켈레톤 |
+
+### 3.3 엑셀 양식 구조 (`coupang_template.xlsx`)
+- **시트 1: 로켓그로스 입고** (80개 상품, 데이터 5행~)
+- **시트 2: 엑셀 일괄 입고요청 사용법 및 유의사항**
+
+| 열 번호 | 컬럼명 | 용도 |
+|---------|--------|------|
+| 1 | No. | 순번 |
+| 2 | 등록상품명 | 상품명 |
+| 3 | 옵션명 | 옵션 |
+| 7 | 옵션 ID | 쿠팡 옵션 식별자 |
+| **22** | **입고 수량 입력 (필수)** | **발주수량 (1~5,000 정수)** |
+| 24 | 유통기간 입력 (일) | 해당 시 필수 |
+| 25 | 유통(소비)기한 | YYYY-MM-DD |
+| 26 | 제조일자 | YYYY-MM-DD |
+| 27 | 생산년도 | YYYY |
+| **36** | **SKU ID** | **상품정보 시트 매칭 키** |
+
+### 3.4 업로드 규칙 (쿠팡 유의사항)
+| 규칙 | 내용 |
+|------|------|
+| 입고 수량 | 1~5,000 정수만. 미입력/유효하지 않으면 자동 누락 |
+| 최대 옵션 | 200개까지 업로드 가능 (초과 시 오류) |
+| 중복 입력 | 동일 옵션ID 중복 시 먼저 입력된 것만 적용 |
+| 재업로드 | 기존 데이터 삭제, 최종 업로드 파일로 대체 |
+| 유통기한 | 실물에 표기된 상품은 반드시 정확한 일자 입력 |
+
+### 3.5 발주수량 계산 로직
+```
+[Step 1] 기준 재고 계산
+  최근 30일 기준 재고(L열) = 30일 일평균(H열) × 30
+  최근 7일 기준 재고(M열) = 7일 일평균(I열) × 30
+
+[Step 2] 최종 발주 참고 수량
+  최종 발주 참고 수량(N열) = max(L열, M열)
+
+[Step 3] 최종 발주량 (입수량 단위 올림)
+  필요수량 = N열 - 현재고량(J열)
+  if 필요수량 ≤ 0 → 최종 발주량 = 0 (발주 불필요)
+  if 필요수량 > 0 → 최종 발주량 = ceil(필요수량 / 입수량(G열)) × 입수량(G열)
+
+[제약]
+  쿠팡 엑셀 업로드: 1 ≤ 입고 수량 ≤ 5,000
+
+[예시] 30일 일평균=5, 7일 일평균=8, 현재고=131, 입수량=10
+  L = 5×30 = 150, M = 8×30 = 240
+  N = max(150, 240) = 240
+  필요수량 = 240-131 = 109
+  최종 발주량 = ceil(109/10) × 10 = 110개 (11박스)
+```
+
+### 3.6 Safety
+- **사용자 리뷰 필수:** 엑셀 업로드 후 최종 제출은 사용자가 수동으로 진행
+- **세션 저장:** `user_data/` 디렉토리에 브라우저 세션 유지
+- **Excel Number Type:** 입고 수량은 `Number()` 타입으로 강제 (Type 2)
 
 ## 4. API Integration (Node.js)
 - **Endpoint:** `https://api-gateway.coupang.com`
@@ -97,7 +175,7 @@ The system consists of three main components:
 | 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~K (SKU ID, 판매금액, 결제일, 최근 수정일시 포함) |
 | 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~I (최근 수정일시 포함) |
 | 창고 실시간 재고 | 89346414 | Clear → Append (서비스 계정 JWT) | - | A~F (상품명, 최근 수정일시 포함) |
-| 상품정보 | - | PUT 덮어쓰기 (서비스 계정 JWT) | SKU ID (C열 기준) | H~K (30일 일평균, 7일 일평균, 현 재고량, 품절 예상일) |
+| 상품정보 | - | PUT 덮어쓰기 (서비스 계정 JWT) | SKU ID (C열 기준) | H~O (30일 일평균, 7일 일평균, 현 재고량, 품절 예상일, 30일 기준 재고, 7일 기준 재고, 최종 발주 참고 수량, 최종 발주량) |
 
 ### 6.5 Architecture Evolution
 | 버전 | 날짜 | 구조 | 문제 |
