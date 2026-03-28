@@ -1,6 +1,6 @@
 # PDCA Design: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-24 | Feature: Order Automation + n8n Scheduling
+> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-28 | Feature: Order Automation + n8n Scheduling
 
 ## 1. System Architecture
 The system consists of three main components:
