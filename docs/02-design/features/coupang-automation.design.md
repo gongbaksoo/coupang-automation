@@ -1,6 +1,6 @@
 # PDCA Design: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-28 | Feature: Order Automation + n8n Scheduling
+> Status: Updated | Date: 2026-03-12 | Updated: 2026-03-29 | Feature: Order Automation + n8n Scheduling
 
 ## 1. System Architecture
 The system consists of three main components:
@@ -29,8 +29,9 @@ The system consists of three main components:
 | N | 최근 30일 기준 재고 | n8n 자동 | I열 × 30 (30일치 재고량) |
 | O | 최근 7일 기준 재고 | n8n 자동 | J열 × 30 (7일 트렌드 기반 30일치) |
 | P | 최종 발주 참고 수량 | n8n 자동 | max(N열, O열) |
-| Q | 최종 발주량 | n8n 자동 | ceil((P열 - K열) / H열) × H열, 0 이하면 0 |
-| R | 최종 발주량 (BOX) | n8n 자동 | Q열 ÷ H열 (박스 수) |
+| Q | 최종 발주량 | n8n 자동 | 운영가능일 ≥ 30이면 "발주X", 아니면 ceil((P열 - K열) / H열) × H열 |
+| R | 최종 발주량 (BOX) | n8n 자동 | 운영가능일 ≥ 30이면 "발주X", 아니면 Q열 ÷ H열 |
+| **S** | **사용자 확정** | **n8n 초기값 + 사용자 수정** | **R열이 "발주X"면 0, 아니면 R열 값. 사용자가 최종 수정 → Playwright 발주 시 이 값 사용** |
 
 ## 3. Order Automation Flow (Playwright + Excel)
 
@@ -40,7 +41,8 @@ The system consists of three main components:
     상품정보 시트 I~R열 (A열=운영여부 추가로 한 칸 이동):
     → N열: 30일 일평균(I) × 30, O열: 7일 일평균(J) × 30
     → P열: max(N, O), Q열: ceil((P - 현재고(K)) / 입수량(H)) × H
-    → M열: 운영 가능일(숫자), Q열 > 0이고 A열=운영인 상품이 발주 대상, R열: 박스 수
+    → M열: 운영 가능일(숫자), M열 ≥ 30이면 Q·R열="발주X" S열=0
+    → M열 < 30이면 Q열: 발주량, R열: 박스 수, S열: R열 복사 (사용자 수정용)
             ↓
 [2] Playwright: 쿠팡 WING 접속 (세션 저장으로 자동 로그인, MFA 시 수동 대기)
             ↓
@@ -102,20 +104,33 @@ The system consists of three main components:
 [Step 2] 최종 발주 참고 수량
   최종 발주 참고 수량(P열) = max(N열, O열)
 
-[Step 3] 최종 발주량 (입수량 단위 올림)
+[Step 3] 운영가능일 필터
+  if 운영가능일(M열) ≥ 30 또는 판매없음 → Q열="발주X", R열="발주X", S열=0
+  if 운영가능일 < 30 → Step 4로
+
+[Step 4] 최종 발주량 (입수량 단위 올림)
   필요수량 = P열 - 현재고량(K열)
   if 필요수량 ≤ 0 → 최종 발주량 = 0 (발주 불필요)
   if 필요수량 > 0 → 최종 발주량 = ceil(필요수량 / 입수량(H열)) × 입수량(H열)
 
+[Step 5] 사용자 확정 (S열)
+  S열 초기값 = R열(최종 발주량 BOX) 값 복사
+  사용자가 S열을 검토/수정 → Playwright 발주 시 S열 값 사용
+
+[발주 트리거 조건]
+  운영여부="운영" 상품 중 운영가능일 < 7인 상품이 1개 이상 존재
+  → 운영가능일 < 30인 모든 운영 상품을 한꺼번에 발주
+
 [제약]
   쿠팡 엑셀 업로드: 1 ≤ 입고 수량 ≤ 5,000
-  발주 대상: A열(운영여부) = "운영" AND Q열 > 0
+  발주 대상: A열(운영여부) = "운영" AND S열 > 0
 
-[예시] 30일 일평균=5, 7일 일평균=8, 현재고=131, 입수량=10
+[예시] 30일 일평균=5, 7일 일평균=8, 현재고=131, 입수량=10, 운영가능일=16
   N = 5×30 = 150, O = 8×30 = 240
   P = max(150, 240) = 240
   필요수량 = 240-131 = 109
   최종 발주량 = ceil(109/10) × 10 = 110개 (11박스)
+  S열(사용자 확정) = 11 (초기값, 사용자 수정 가능)
 ```
 
 ### 3.6 Safety
@@ -179,7 +194,7 @@ The system consists of three main components:
 | 매출 분석 | 1050492672 | appendOrUpdate | 주문번호(Order ID) | A~K (SKU ID, 판매금액, 결제일, 최근 수정일시 포함) |
 | 반품 및 취소 분석 | 870651715 | appendOrUpdate | 접수번호 | A~I (최근 수정일시 포함) |
 | 창고 실시간 재고 | 89346414 | Clear → Append (서비스 계정 JWT) | - | A~F (상품명, 최근 수정일시 포함) |
-| 상품정보 | - | PUT 덮어쓰기 (서비스 계정 JWT) | SKU ID (D열 기준) | I~R (일평균, 재고, 품절예상일, 운영가능일, 기준재고, 발주참고, 발주량, BOX) |
+| 상품정보 | - | PUT 덮어쓰기 (서비스 계정 JWT) | SKU ID (D열 기준) | I~S (일평균, 재고, 품절예상일, 운영가능일, 기준재고, 발주참고, 발주량, BOX, 사용자확정) |
 
 ### 6.5 Architecture Evolution
 | 버전 | 날짜 | 구조 | 문제 |
