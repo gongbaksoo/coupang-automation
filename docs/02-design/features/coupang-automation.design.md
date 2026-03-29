@@ -148,6 +148,43 @@ The system consists of three main components:
     - `GET /v2/providers/openapi/apis/api/v6/vendors/{vendorId}/returnRequests` (Returns/Cancellations)
     - `GET /v2/providers/rg_open_api/apis/api/v1/vendors/{vendorId}/rg/inventory/summaries` (Stock)
 
+### 4.1 Inventory API 반환 필드 (2026-03-29 실측)
+n8n 테스트 워크플로우로 실제 API 응답을 확인한 결과, 아이템당 반환 필드:
+```json
+{
+  "vendorItemId": 92858936621,       // 옵션ID
+  "vendorId": "A00003300",           // 벤더ID (고정)
+  "salesCountMap": {
+    "SALES_COUNT_LAST_THIRTY_DAYS": 399  // 최근 30일 판매수량 (현재 미수집)
+  },
+  "inventoryDetails": {
+    "totalOrderableQuantity": 798     // 판매가능 재고 (수집 중)
+  },
+  "externalSkuId": 3570188           // 판매자상품코드 (수집 중)
+}
+```
+- `inventoryDetails`에는 `totalOrderableQuantity` 1개 필드만 존재 (불량/보류 재고 필드 없음)
+- 상품정보 시트 D열 "판매불가 재고(불량/보류)" 컬럼은 API 미제공으로 항상 0
+- `salesCountMap.SALES_COUNT_LAST_THIRTY_DAYS`는 추가 수집 가능한 유일한 미수집 필드
+
+### 4.2 WING 엑셀 다운로드 전용 데이터 (API 미제공)
+쿠팡 WING > 재고 현황 > 엑셀 다운로드(`inventory_health_sku_info_*.xlsx`)에서만 제공되는 27개 컬럼:
+| 컬럼 | API 제공 | 비고 |
+|------|---------|------|
+| 등록상품명 / 옵션명 | ❌ | |
+| 상품등급 (NEW 등) | ❌ | |
+| 입고예정재고 | ❌ | 발주 판단에 중요 |
+| 아이템위너 | ❌ | |
+| 최근 매출 7일/30일 (금액) | ❌ | |
+| 최근 판매수량 7일 | ❌ | API는 30일만 |
+| 추가입고 추천수량 | ❌ | 쿠팡 자체 추천 |
+| 추가입고날짜 (입고예정일) | ❌ | |
+| 재고예상 소진일 | ❌ | |
+| 이번달 누적보관료 | ❌ | 비용 관리 |
+| 보관기간별 재고 (6구간: 1~30일, 31~45일, 46~60일, 61~120일, 121~180일, 181일+) | ❌ | 장기재고 관리 |
+| 고객반품 지난 30일 | ❌ | |
+| 시즌관리 / 상품등록일 | ❌ | |
+
 ## 5. Security & Safety
 - **IP Whitelisting:** Registered IPs in WING portal: `1.215.255.114` (local), `110.12.64.124` (n8n server).
 - **MFA Handling:** Saved browser session in `user_data` directory.

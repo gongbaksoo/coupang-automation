@@ -35,6 +35,7 @@
   - [ ] 발주 완료 후 구글 시트 상태 업데이트 (Order Status → Done)
 - [x] [Do] 매출 분석 및 반품/취소 데이터 수집 자동화 (Coupang API)
 - [x] [Do] 창고 실시간 재고 수집 자동화 (Coupang API)
+- [x] [Research] 쿠팡 Inventory API 반환 필드 조사 (5개 필드만 반환, WING 엑셀 대비 제한적)
 - [x] [Do] n8n 워크플로우 구축 (매일 새벽 2시 자동 실행)
   - [x] Execute Command 노드로 Node.js 직접 실행 (샌드박스 우회)
   - [x] HMAC-SHA256 서명 + HTTP 호출 + 페이지네이션 완전 지원
@@ -53,7 +54,45 @@
 - [x] [Do] 매출 분석 시트에 SKU ID 컬럼 추가 (옵션ID 매칭 시트 기반, C열 삽입)
 - [x] [Fix] 상품정보 업데이트 매핑 키를 옵션ID → SKU ID로 변경
 
-## 5. Success Metrics
+## 5. API 데이터 한계 조사 (2026-03-29)
+
+### Inventory Summaries API 실제 반환 필드
+n8n 테스트 워크플로우를 통해 쿠팡 RG Inventory Summaries API 응답을 직접 확인한 결과:
+```json
+{
+  "vendorItemId": 92858936621,
+  "vendorId": "A00003300",
+  "salesCountMap": { "SALES_COUNT_LAST_THIRTY_DAYS": 399 },
+  "inventoryDetails": { "totalOrderableQuantity": 798 },
+  "externalSkuId": 3570188
+}
+```
+- API는 위 5개 필드만 반환하며, 불량/보류 재고, 입고예정재고, 보관기간별 재고 등은 **제공하지 않음**
+- `salesCountMap.SALES_COUNT_LAST_THIRTY_DAYS` (최근 30일 판매량)는 현재 미수집 상태
+
+### WING 엑셀 다운로드 (inventory_health_sku_info) vs API 비교
+| 데이터 | API | WING 엑셀 |
+|--------|-----|-----------|
+| 옵션ID / SKU ID | ✅ | ✅ |
+| 등록상품명 / 옵션명 | ❌ | ✅ |
+| 상품등급 | ❌ | ✅ |
+| 판매가능재고 | ✅ | ✅ |
+| 입고예정재고 | ❌ | ✅ |
+| 아이템위너 여부 | ❌ | ✅ |
+| 최근 매출 (7일/30일) | ❌ | ✅ |
+| 최근 판매수량 (7일/30일) | 30일만 | ✅ (7일+30일) |
+| 추가입고 추천수량 | ❌ | ✅ |
+| 추가입고날짜 (입고예정일) | ❌ | ✅ |
+| 재고예상 소진일 | ❌ | ✅ |
+| 이번달 누적보관료 | ❌ | ✅ |
+| 보관기간별 재고 (6구간) | ❌ | ✅ |
+| 고객반품 지난 30일 | ❌ | ✅ |
+| 시즌관리 | ❌ | ✅ |
+| 상품등록일 | ❌ | ✅ |
+
+**결론:** API로는 재고/판매 기본 수치만 확보 가능. 입고추천, 보관료, 보관기간별 재고 등 고급 데이터는 WING 엑셀 다운로드에서만 제공됨.
+
+## 6. Success Metrics
 - [x] 엑셀 업로드 방식을 통한 [다음] 버튼 활성화 성공.
 - [x] 최근 30일치 매출 및 반품 데이터(약 3,800건) 구글 시트 자동 수집 성공.
 - [x] 깃허브 저장소 백업 완료.
