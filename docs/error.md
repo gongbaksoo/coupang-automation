@@ -148,4 +148,32 @@ n8n Code Node에서 사용 **가능**한 것:
 - **상황:** n8n MCP API의 `updateNode`로 매출 분석 업데이트 노드의 `columns` 스키마만 업데이트했더니, 노드가 `read: sheet`로 표시되며 에러 발생
 - **원인:** `updateNode`에서 `parameters.columns`만 전달하면 `operation`, `documentId`, `sheetName` 등 기존 파라미터가 덮어씌워져 기본값(`read`)으로 초기화됨
 - **해결:** `updateNode` 시 `columns`뿐 아니라 `operation: "appendOrUpdate"`, `documentId`, `sheetName` 등 모든 필수 파라미터를 함께 전달
-- **교훈:** n8n MCP `updateNode`의 `parameters`는 **부분 업데이트가 아닌 전체 교체(replace)**로 동작함. 변경하지 않는 파라미터도 반드시 포함해야 함
+- **교훈:** n8n MCP `updateNode`의 `parameters`는 **부분 업데이트가 아닌 전체 교체(replace)**로 동작함. 변경하지 않는 파라미터도 반드시 포함해야 함. (2026-04-22 보강: dot-path 표기 `"parameters.authentication": "serviceAccount"` 형태로 전달 시에는 해당 필드만 갱신되고 나머지 parameters는 보존됨)
+
+---
+
+## 추가 에러 기록 (2026-04-22)
+
+## 에러 18: Google Sheets OAuth2 refresh token 만료로 인한 무음 실패
+- **상황:** n8n 워크플로우 `쿠팡 로켓그로스 매출/반품/재고 자동 수집 (매일 2시)` 가 매일 새벽 2시(KST) 정상적으로 트리거되고 실행 status도 `success`로 기록되지만, 구글 시트 `매출 분석` / `반품 및 취소 분석` 탭이 며칠간 업데이트되지 않음. 실행 리스트 화면상 오류 표시 없음.
+- **탐지 방법:** 실행 ID 66735 (2026-04-21 17:00 UTC) 로그를 `mode: filtered`로 세부 조사 → `매출 분석 업데이트` 노드의 output JSON 내부에 `NodeApiError` 객체가 임베드돼 있는 것을 발견.
+  ```
+  "error": "The provided authorization grant (e.g., authorization code, resource owner
+  credentials) or refresh token is invalid, expired, revoked, does not match the
+  redirection URI used in the authorization request, or was issued to another client."
+  "name": "NodeApiError"
+  ```
+- **원인 (3중 문제):**
+  1. **OAuth refresh token 만료** — Google Sheets 노드의 `googleSheetsOAuth2Api` credential이 사용하던 refresh token이 Google 측에서 무효화됨. OAuth refresh token은 장기 미사용, 권한 변경, 특정 기간 경과 등으로 자동 폐기 가능.
+  2. **n8n 노드의 silent error** — Google Sheets 노드가 `continueOnFail: true` 상태였고, 인증 오류를 throw하지 않고 output 객체에 담음 → n8n 실행 wrapper는 `success`로 마킹.
+  3. **실행 조기 종료** — 매출 분석 업데이트 실패 후 다운스트림 `반품 분석 업데이트`, `재고 전체 처리`, `상품정보 업데이트` 등 7개 노드가 아예 실행되지 않음 (3/10만 실행). 병렬 구조여도 특정 브랜치 실패가 공유 Merge 노드(`대기`)에서 이어지는 하류 노드 실행을 막음.
+- **해결 (Service Account 전환, 영구적 fix):**
+  1. 기존 프로젝트에 이미 존재하던 서비스 계정 `coupang-gross@gen-lang-client-0189633150.iam.gserviceaccount.com` 재활용 (타겟 스프레드시트에 이미 편집자 권한 부여되어 있음).
+  2. n8n UI에서 `Google Service Account API` 타입 credential 신규 등록 (ID: `WPlIfwYpUx3h0TpV`). Private Key는 `service-account.json`의 `private_key` 값을 파이썬 `json.load`로 추출해 실제 줄바꿈 포함 PEM 형식으로 변환 후 붙여넣기 (에스케이프된 `\n` 문자열 그대로 붙이면 `secretOrPrivateKey must be an asymmetric key when using RS256` 에러 발생).
+  3. 매출 분석 업데이트 / 반품 분석 업데이트 두 노드에 `parameters.authentication = "serviceAccount"` 추가 + `credentials.googleApi` (신규 SA credential) 로 교체. MCP `n8n_update_partial_workflow`의 `updateNode` **dot-path 업데이트** 사용으로 기존 columns/schema/mapping 필드는 보존.
+- **검증:** 실행 66741 (2026-04-22 05:55 UTC, 수동 트리거) — 전체 10/10 노드 모두 success. 매출 분석 42 rows, 반품 분석 2 rows 실제 시트 반영 확인.
+- **교훈:**
+  - **Service Account JWT 인증은 refresh token이 없어 만료 자체가 발생하지 않음.** 서비스 계정 키 파일만 유지되면 반영구적으로 동작 → 장기 배치 자동화에 OAuth2보다 적합.
+  - n8n 실행 status "success"는 **워크플로우 wrapper 수준의 성공**이며, 노드 output 내부의 에러까지 보장하지 않음. 장기 자동화는 반드시 실제 데이터 적재 결과를 별도 모니터링해야 함 (시트 타임스탬프 / 행 증가 등).
+  - `continueOnFail: true` 옵션이 설정된 노드는 인증 오류조차 조용히 넘어가므로, 중요 경로(쓰기 작업)에서는 이 옵션을 재고해야 함.
+  - PEM private key를 UI에 붙여넣을 때 JSON 인코딩된 상태(`\n` 이스케이프)가 아닌 **실제 개행 포함 원본 PEM** 포맷이 필요. 파이썬 `json.load` 또는 `jq -r .private_key` 로 변환 후 사용.

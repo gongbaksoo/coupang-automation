@@ -1,6 +1,6 @@
 # PDCA Plan: 쿠팡 발주 자동화 (Coupang Order Automation)
 
-> Status: In Progress | Date: 2026-03-12 | Updated: 2026-03-29
+> Status: In Progress | Date: 2026-03-12 | Updated: 2026-04-22
 
 ## 1. Overview
 쿠팡 로켓그로스(제트배송) 발주 프로세스 자동화 및 API를 활용한 실시간 매출/재고/반품 데이터 구글 시트 연동. n8n을 활용한 매일 자동 수집 자동화.
@@ -53,6 +53,12 @@
   - [x] Merge 노드로 매출/재고 완료 대기 후 실행
 - [x] [Do] 매출 분석 시트에 SKU ID 컬럼 추가 (옵션ID 매칭 시트 기반, C열 삽입)
 - [x] [Fix] 상품정보 업데이트 매핑 키를 옵션ID → SKU ID로 변경
+- [x] [Fix] 매출/반품 분석 업데이트 노드 Google Sheets OAuth2 → Service Account JWT 전환 (2026-04-22)
+  - [x] 무음 실패 근본 원인 진단 (OAuth2 refresh token 만료, n8n wrapper success로 가림)
+  - [x] n8n에 Google Service Account API credential 등록 (ID `WPlIfwYpUx3h0TpV`)
+  - [x] MCP dot-path updateNode로 두 노드 `parameters.authentication`, `credentials` 필드 교체 (기존 columns/schema 보존)
+  - [x] 수동 실행 검증: 실행 66741에서 10/10 노드 성공, 매출 42건 반품 2건 반영
+- [x] [Infra] 로컬 Mac에 `gws` CLI 설치 (`brew install googleworkspace-cli` v0.22.5) — 향후 Gmail/Drive 터미널 자동화 기반 도구
 
 ## 5. API 데이터 한계 조사 (2026-03-29)
 
@@ -110,6 +116,7 @@ n8n 테스트 워크플로우를 통해 쿠팡 RG Inventory Summaries API 응답
 - [x] 상품정보 시트 L~S열 자동 계산 (운영 가능일, 30일/7일 기준 재고, 최종 발주 참고 수량, 최종 발주량, 최종 발주량 BOX, 사용자 확정).
 - [x] 운영가능일 ≥ 30 상품 Q·R열 "발주X", S열 0 표시.
 - [x] S열(사용자 확정): 발주 대상은 R열 복사, 발주X는 0. Playwright 발주 시 S열 기준.
+- [x] **Google Sheets 인증 Service Account JWT로 통일 (2026-04-22)** — OAuth2 refresh token 만료로 인한 무음 실패 영구 차단. 모든 시트 쓰기 노드가 동일 SA 자격증명 사용.
 - [ ] Playwright로 쿠팡 WING 발주서 양식 다운로드 → 수정 → 업로드 성공.
 - [ ] 발주 완료 후 구글 시트 Order Status 자동 갱신.
 
